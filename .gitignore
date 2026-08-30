@@ -2,5 +2,4 @@ __pycache__/
 *.pyc
 .venv/
 venv/
-server.log
-.DS_Store
+tasks.db
