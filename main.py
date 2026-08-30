@@ -1,4 +1,7 @@
-from fastapi import FastAPI, HTTPException
+from typing import Optional
+
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="Task API", version="1.0")
@@ -14,6 +17,24 @@ next_id = 4
 
 class TaskCreate(BaseModel):
     title: str = ""
+
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    done: Optional[bool] = None
+
+
+def find_task(task_id: int):
+    for task in tasks:
+        if task["id"] == task_id:
+            return task
+    return None
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Every 4xx/5xx in this API is shaped as {"error": "..."} per spec."""
+    return JSONResponse(status_code=exc.status_code, content={"error": exc.detail})
 
 
 @app.get("/")
@@ -37,10 +58,10 @@ def list_tasks():
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
     """Return a single task by id, or 404 if it doesn't exist."""
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 
 @app.post("/tasks", status_code=201)
@@ -54,3 +75,35 @@ def create_task(payload: TaskCreate):
     tasks.append(task)
     next_id += 1
     return task
+
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, payload: TaskUpdate):
+    """Replace a task's title and/or done. Unknown id -> 404, empty/invalid body -> 400."""
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+
+    if payload.title is None and payload.done is None:
+        raise HTTPException(status_code=400, detail="provide at least title or done to update")
+
+    if payload.title is not None:
+        title = payload.title.strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="title cannot be empty")
+        task["title"] = title
+
+    if payload.done is not None:
+        task["done"] = payload.done
+
+    return task
+
+
+@app.delete("/tasks/{task_id}", status_code=204)
+def delete_task(task_id: int):
+    """Remove a task. Unknown id -> 404. Success returns 204 with no body."""
+    task = find_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    tasks.remove(task)
+    return Response(status_code=204)
