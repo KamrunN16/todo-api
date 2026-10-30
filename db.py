@@ -1,40 +1,34 @@
-import sqlite3
+import os
 
-DB_PATH = "tasks.db"
+import psycopg
+from dotenv import load_dotenv
+from psycopg.rows import dict_row
+
+load_dotenv()
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 def get_conn():
-    """Open (and implicitly create, if missing) the SQLite database file."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    # Enforce foreign keys / sane defaults; not strictly needed for one table,
-    # but good habit for a real project.
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
 
 
 def init_db():
-    """Create the tasks table if it doesn't exist, and seed 3 example tasks
-    the very first time (only if the table is currently empty)."""
     conn = get_conn()
     try:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS tasks (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 title TEXT NOT NULL,
-                done BOOLEAN NOT NULL DEFAULT 0
+                done BOOLEAN NOT NULL DEFAULT FALSE
             )
             """
         )
-
-        (count,) = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()
+        count = conn.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"]
         if count == 0:
-            # Wrapped implicitly in a transaction: sqlite3's default
-            # isolation level means these three inserts commit together.
-            conn.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", ("Buy groceries", 0))
-            conn.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", ("Write report", 0))
-            conn.execute("INSERT INTO tasks (title, done) VALUES (?, ?)", ("Call plumber", 1))
-            conn.commit()
+            conn.execute("INSERT INTO tasks (title, done) VALUES (%s, %s)", ("Buy groceries", False))
+            conn.execute("INSERT INTO tasks (title, done) VALUES (%s, %s)", ("Write report", False))
+            conn.execute("INSERT INTO tasks (title, done) VALUES (%s, %s)", ("Call plumber", True))
+        conn.commit()
     finally:
         conn.close()

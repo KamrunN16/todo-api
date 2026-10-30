@@ -1,107 +1,120 @@
-# Task API (SQLite edition)
+# Task API
 
-A CRUD API for managing a to-do list, built with **FastAPI**. Assignment 1 kept its
-tasks in memory (gone on every restart); this version stores them in a real
-**SQLite** database instead. The endpoints, request/response shapes, and status
-codes are unchanged from Assignment 1 — only the storage layer moved.
+A RESTful Task Management API built with FastAPI and PostgreSQL. The application and database are containerized using Docker Compose, with persistent database storage.
 
-## Why SQLite
+## Technologies Used
 
-- Zero setup: no separate database server to install, configure, or run.
-- The whole database is one file (`tasks.db`), which is perfect for a small
-  project like this and for learning SQL without extra moving parts.
-- It's created automatically the first time the app runs, and it's easy to
-  inspect by hand with a free GUI tool (see Stage 4 below).
+- Python 3.12
+- FastAPI
+- PostgreSQL 17
+- Psycopg
+- Docker
+- Docker Compose
 
-## Where the database lives
+## Project Features
 
-`tasks.db`, created automatically in the project folder the first time the
-app starts. It's listed in `.gitignore`, so every fresh clone starts with a
-clean database (the `tasks` table and 3 example tasks are recreated on first
-run — see `db.py`).
+- Create, retrieve, update, and delete tasks.
+- Store task data in PostgreSQL.
+- Automatically create the tasks table if it does not exist.
+- Seed three initial tasks when the database is empty.
+- Validate task titles.
+- Return appropriate HTTP status codes.
+- Persist database records using a Docker named volume.
 
-## Install & run
+## Environment Variables
 
-```bash
-pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-```
+Create a `.env` file in the project root using `.env.example` as a template.
 
-Then open **http://localhost:8000** in your browser, or **http://localhost:8000/docs**
-for the interactive Swagger UI. On first run, `tasks.db` is created automatically
-with the `tasks` table and 3 seed tasks.
+Required variables:
 
-## Endpoints
+- `POSTGRES_USER`
+- `POSTGRES_PASSWORD`
+- `POSTGRES_DB`
+- `DATABASE_URL`
 
-| Method | Path            | Description                              | Success | Errors |
-|--------|-----------------|-------------------------------------------|---------|--------|
-| GET    | `/`             | API description                           | 200     | —      |
-| GET    | `/health`       | Liveness check                            | 200     | —      |
-| GET    | `/tasks`        | List all tasks (supports filters below)   | 200     | —      |
-| GET    | `/tasks/{id}`   | Get one task                              | 200     | 404    |
-| POST   | `/tasks`        | Create a task (`{"title": "..."}`)        | 201     | 400    |
-| PUT    | `/tasks/{id}`   | Update a task's `title` and/or `done`     | 200     | 400, 404 |
-| DELETE | `/tasks/{id}`   | Delete a task                             | 204     | 404    |
-| GET    | `/stats`        | *(extra)* `{ total, done, open }` counts, computed with SQL `COUNT()` | 200 | — |
-| POST   | `/reset`        | *(extra)* Wipe and restore the 3 seed tasks | 200   | —      |
+The API connects to PostgreSQL using the hostname `db` inside Docker Compose.
 
-`GET /tasks` also accepts optional query parameters (now implemented as SQL
-`WHERE`/`LIKE`/`LIMIT` clauses instead of Python list filtering):
+Do not commit your actual `.env` file to GitHub.
 
-- `?done=true` / `?done=false` — filter by completion status
-- `?search=milk` — only tasks whose title contains the text (`LIKE` operator)
-- `?limit=2&offset=2` — pagination
+## Run the Application
 
-Every error response is shaped as `{ "error": "..." }`.
+Make sure Docker and Docker Compose are installed.
 
-## Persistence check
+Run the application using:
 
-```bash
-curl -s -X POST http://localhost:8000/tasks -d '{"title":"Buy milk"}' -H "Content-Type: application/json"
-# stop the server (Ctrl+C), then start it again
-uvicorn main:app --port 8000
-curl -s http://localhost:8000/tasks
-# "Buy milk" is still there
-```
+    docker compose up --build
 
-## Exploring the database by hand (Stage 4)
+API URL: http://localhost:8000
 
-Opened `tasks.db` in **DB Browser for SQLite** and ran, in the "Execute SQL" tab:
+Interactive documentation: http://localhost:8000/docs
 
-```sql
-SELECT * FROM tasks WHERE done = 1;
-```
+## API Endpoints
 
-This returned the one seeded task marked complete (`Call plumber`). Changing
-rows here and then calling `GET /tasks` immediately reflects the edit — the
-API and DB Browser read the same file, so there's nothing to "sync."
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/` | API information |
+| GET | `/health` | Health check |
+| GET | `/tasks` | Retrieve all tasks |
+| GET | `/tasks/{task_id}` | Retrieve a task |
+| POST | `/tasks` | Create a task |
+| PUT | `/tasks/{task_id}` | Update a task |
+| DELETE | `/tasks/{task_id}` | Delete a task |
+| GET | `/stats` | Task statistics |
 
-> **Add your screenshot here:** open `tasks.db` in DB Browser for SQLite,
-> run a query, and paste a screenshot into this section before you submit.
+## Example Requests
 
-![DB Browser screenshot](db-browser-screenshot.png)
+Retrieve all tasks:
 
-## What changed vs. Assignment 1
+    curl -i http://localhost:8000/tasks
 
-- Storage moved from a Python list to a `tasks` table in `tasks.db`.
-- Every CRUD operation now runs a parameterized SQL query (`?` placeholders —
-  never string-glued SQL) via `db.py`.
-- The table is created automatically if missing, and seeded with 3 example
-  tasks only the first time (checked with `SELECT COUNT(*)` before inserting).
-- The API's routes, request/response bodies, and status codes are identical —
-  proving that storage really is just an implementation detail behind the API.
+Retrieve one task:
 
-## Project structure
+    curl -i http://localhost:8000/tasks/1
 
-```
-.
-├── main.py           # the API (routes, validation, same shapes as A1)
-├── db.py             # SQLite connection, schema creation, seeding
-├── requirements.txt
-└── README.md
-```
-   ## Postgres (Docker)
+Create a task:
 
-   ```
-   docker run --name taskdb -e POSTGRES_PASSWORD=dev -e POSTGRES_DB=tasks -p 5432:5432 -v taskdata:/var/lib/postgresql/data -d postgres:17
-   ```
+    curl -i -X POST http://localhost:8000/tasks \
+      -H "Content-Type: application/json" \
+      -d '{"title":"Complete Docker assignment"}'
+
+Update a task:
+
+    curl -i -X PUT http://localhost:8000/tasks/1 \
+      -H "Content-Type: application/json" \
+      -d '{"title":"Updated task","done":true}'
+
+Delete a task:
+
+    curl -i -X DELETE http://localhost:8000/tasks/1
+
+## Database Persistence
+
+PostgreSQL data is stored in the named Docker volume `taskdata`.
+
+Stop containers:
+
+    docker compose down
+
+Restart the application:
+
+    docker compose up -d
+
+The named volume preserves database records after containers are removed and recreated. Do not use `docker compose down -v` when you want to preserve the data.
+
+## Database Verification
+
+Connect to PostgreSQL:
+
+    docker compose exec db psql -U postgres -d tasks
+
+Verify the table:
+
+    \dt
+
+View stored records:
+
+    SELECT * FROM tasks;
+
+## Database Screenshot
+
+![PostgreSQL database verification](screenshots/database.png)
